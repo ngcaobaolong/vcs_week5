@@ -65,7 +65,8 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
       else $fullname = $row['fullname'];
       if (isset($_POST['phone']) && ($_POST['phone'] !== "")) $phone = $_POST["phone"];
       else $phone = $row['phone'];
-      $is_admin = $row['is_admin'];
+      if (isset($_POST['is_admin']) && ($_POST['is_admin'] !== "") && ($_SESSION['is_admin'])) $is_admin = $_POST["is_admin"];
+      else $is_admin = $row['is_admin'];
 
       if (isset($_FILES["avatar"]) && $_FILES['avatar']['name'] !== "") {
         $filepath = $_FILES['avatar']['tmp_name'];
@@ -97,17 +98,12 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
           die("Can't move file." . $newFilepath);
         }
         unlink($filepath);
-        echo ("Avatar uploaded successfully to " . path2url($newFilepath));
+        $avatar = path2url($newFilepath);
       }
       $stmt = $conn->prepare("UPDATE `users` SET `username` = ?, `password` = ?, `fullname` = ?, `email` = ?, `phone` = ?, `is_admin` = ?, `avatar` = ? WHERE `users`.`id` = $id");
-      $stmt->bind_param("sssssis", $username, $password, $fullname, $email, $phone, $is_admin, path2url($newFilepath));
-      if ($stmt->execute()) {
-        echo ("success");
-      } else {
-        echo "fail";
-      };
+      $stmt->bind_param("sssssis", $username, $password, $fullname, $email, $phone, $is_admin, $avatar);
+      $stmt->execute();
       $stmt->close();
-      $conn->close();
     }
   } else {
     header("refresh:3;url=course-account.php");
@@ -162,7 +158,7 @@ if (isset($_POST['action']) && $_POST['action'] === "message" && isset($_POST['m
       <div class="row">
         <div id="course-left-sidebar" class="col-md-3">
           <div class="course-image-widget">
-            <img src="<?php echo $this_avatar; ?>" alt="" class="img-responsive">
+            <img src="<?php echo $this_avatar ?>" alt="" class="img-responsive">
           </div>
           <div class="course-meta">
             <p><?php echo $this_username ?></p>
@@ -185,8 +181,7 @@ if (isset($_POST['action']) && $_POST['action'] === "message" && isset($_POST['m
                 </div>
                 <div class="form-group">
                   <label>Email Address</label>
-                  <input type="email" name="email" id="email" class="form-control" placeholder="<?php echo $this_email ?>" <?php echo strval($_SESSION['id']) === $_GET['id'];
-                                                                                                                            if (!$_SESSION['is_admin'] && !(strval($_SESSION['id']) === $_GET['id'])) echo "disabled" ?>>
+                  <input type="email" name="email" id="email" class="form-control" placeholder="<?php echo $this_email ?>" <?php if (!$_SESSION['is_admin'] && !(strval($_SESSION['id']) === $_GET['id'])) echo "disabled" ?>>
                 </div>
                 <div class="form-group">
                   <label>Phone number</label>
@@ -219,24 +214,28 @@ if (isset($_POST['action']) && $_POST['action'] === "message" && isset($_POST['m
                 ?>
                 <button type="submit" class="btn btn-primary" formmethod="post">Submit Changes</button>
               </form>
-              <form method="post" role="form" enctype="multipart/form-data">
+              <?php
+              if (strval($_SESSION['id']) !== $_GET['id']) {
+                $x = <<<EOD
+                <form method="post" role="form" enctype="multipart/form-data">
                 <div class="form-group">
                   <label>Send a message</label>
                   <input type="hidden" name="action" value="message" />
                 </div>
-                <textarea type="text" name="message" id="message" class="form-control" placeholder="Type your message in here"><?php echo $this_message ?></textarea>
+                <textarea type="text" name="message" id="message" class="form-control" placeholder="Type your message in here">$this_message</textarea>
                 <button type="submit" class="btn btn-primary" formmethod="post">Send message</button>
               </form>
-
-              <?php
+              EOD;
+                echo $s;
+              };
               if ($_GET['id'] === strval($_SESSION['id'])) {
                 echo "<label>Message from others</label>";
                 $stmt = $conn->prepare("SELECT * FROM week5.chats INNER JOIN users ON users.id = chats.id_from WHERE chats.id_to = ?");
                 $stmt->bind_param("i",  $_GET['id']);
                 $stmt->execute();
                 $result = $stmt->get_result();
-                while ($row=$result->fetch_assoc()) {
-                  echo "<text>Message from ".$row['username']." : ".$row['message']."</text>";
+                while ($row = $result->fetch_assoc()) {
+                  echo "<text>Message from " . $row['username'] . " : " . $row['message'] . "</text>";
                 }
                 $stmt->close();
               }

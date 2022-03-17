@@ -2,11 +2,51 @@
 <?php
 session_start();
 require_once("head.html");
+if ($_SESSION['username'] === NULL) {
+  header("refresh:3;url=course-login.php");
+  die("Log in first!");
+}
 require_once("lib/connection.php");
 function path2url($file)
 {
   return '/' . str_replace($_SERVER['DOCUMENT_ROOT'], '', $file);
 }
+if (isset($_FILES["question"]) && $_FILES['question']['name'] !== "" && $_SESSION["is_admin"] && isset($_POST['homework_name']) && $_POST['homework_name'] !== "") {
+  $filepath = $_FILES['question']['tmp_name'];
+  $fileSize = filesize($filepath);
+  $fileinfo = finfo_open(FILEINFO_MIME_TYPE);
+  $filetype = finfo_file($fileinfo, $filepath);
+  if ($fileSize === 0) {
+    header("refresh:3;url=course-account.php");
+    die("The file is empty.");
+  }
+  if ($fileSize > 31457280) {
+    header("refresh:3;url=course-account.php");
+    die("The file is too large");
+  }
+  $allowedTypes = [
+    'text/plain' => 'txt'
+  ];
+  if (!in_array($filetype, array_keys($allowedTypes))) {
+    header("refresh:3;url=course-account.php");
+    die("File not allowed.");
+  }
+  $filename = explode(".", $_FILES['question']['name'])[0];
+  $extension = $allowedTypes[$filetype];
+  $targetDirectory = __DIR__ . "/upload";
+  $newFilepath = $targetDirectory . "/" . $filename . "." . $extension;
+  if (!copy($filepath, $newFilepath)) {
+    header("refresh:3;url=course-account.php");
+    die("Can't move file." . $newFilepath);
+  }
+  unlink($filepath);
+  echo ("question uploaded successfully to " . path2url($newFilepath));
+  $stmt = $conn->prepare("INSERT INTO week5.homeworks (file_url, homework_name, uploader_id) VALUES (?, ?, ?)");
+  $stmt->bind_param("ssi", path2url($newFilepath), $_POST['homework_name'], $_SESSION['id']);
+  $stmt->execute();
+  $stmt->close();
+}
+
 if (isset($_FILES["answer"]) && $_FILES['answer']['name'] !== "" && isset($_POST["question_id"]) && $_POST["question_id"] !== "") {
   $stmt = $conn->prepare("SELECT * FROM week5.homeworks WHERE homeworks.question_id = ?");
   $stmt->bind_param("i", $_POST["question_id"]);
@@ -32,7 +72,7 @@ if (isset($_FILES["answer"]) && $_FILES['answer']['name'] !== "" && isset($_POST
       header("refresh:3;url=course-account.php");
       die("File not allowed.");
     }
-    $filename = basename($filepath);
+    $filename = explode(".", $_FILES['answer']['name'])[0];
     $extension = $allowedTypes[$filetype];
     $targetDirectory = __DIR__ . "/upload";
     $newFilepath = $targetDirectory . "/" . $filename . "." . $extension;
@@ -42,7 +82,6 @@ if (isset($_FILES["answer"]) && $_FILES['answer']['name'] !== "" && isset($_POST
     }
     unlink($filepath);
     echo ("answer uploaded successfully to " . path2url($newFilepath));
-    var_dump($_SESSION['id'], $newFilepath, $_POST['question_id']);
     $stmt = $conn->prepare("INSERT INTO week5.answers (`uploader_id`, `file_path`, `question_id`) VALUES (?, ?, ?)");
     $stmt->bind_param("isi", $_SESSION['id'], path2url($newFilepath), $_POST['question_id']);
     $stmt->execute();
@@ -60,6 +99,17 @@ if (isset($_FILES["answer"]) && $_FILES['answer']['name'] !== "" && isset($_POST
       <div class="row">
         <div class="col-md-6 text-left">
           <h1>Homework</h1>
+          <?php
+          $s = <<<EOD
+          <form method="post" role="form" enctype="multipart/form-data">
+            <label>Upload Homework</label>
+            <input type="text" name="homework_name"/>
+            <input type="file" name="question" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" formmethod="post">Add homework</button>
+          </form>
+          EOD;
+          if ($_SESSION['is_admin']) echo $s;
+          ?>
         </div>
         <div class="col-md-6 text-right">
           <div class="bread">
@@ -78,7 +128,6 @@ if (isset($_FILES["answer"]) && $_FILES['answer']['name'] !== "" && isset($_POST
       <div class="row">
         <div class="col-md-6 col-md-6">
           <?php
-
           $stmt = $conn->prepare("SELECT * FROM week5.homeworks INNER JOIN week5.users ON users.id = homeworks.uploader_id");
           $stmt->execute();
           $result = $stmt->get_result();
