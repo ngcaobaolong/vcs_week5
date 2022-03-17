@@ -6,12 +6,13 @@ if ($_SESSION['username'] === NULL) {
 }
 require_once("lib/connection.php");
 
-function path2url($file) {
-  return '/'.str_replace($_SERVER['DOCUMENT_ROOT'], '', $file);
+function path2url($file)
+{
+  return '/' . str_replace($_SERVER['DOCUMENT_ROOT'], '', $file);
 }
 
-$stmt = $conn->prepare("select * from users where id = ? ");
-$stmt->bind_param("s", $_GET['id']);
+$stmt = $conn->prepare("SELECT * FROM week5.users WHERE id = ? ");
+$stmt->bind_param("i", $_GET['id']);
 $stmt->execute();
 $result = $stmt->get_result();
 if ($result->num_rows == 1) {
@@ -20,12 +21,21 @@ if ($result->num_rows == 1) {
   $this_fullname = $this_row['fullname'];
   $this_email = $this_row['email'];
   $this_phone = $this_row['phone'];
+  $this_avatar = $this_row['avatar'];
 }
-$stmt->close();
+$stmt = $conn->prepare("SELECT * FROM week5.chats WHERE id_from = ? AND id_to = ?");
+$stmt->bind_param("ii", $_SESSION['id'], $_GET['id']);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($result->num_rows == 1) {
+  $this_row = $result->fetch_assoc();
+  $this_message = $this_row['message'];
+}
+
 
 if (isset($_POST['action']) && $_POST['action'] === "alter") {
   if (isset($_GET['id'])) {
-    $stmt = $conn->prepare("select * from users where id = ? ");
+    $stmt = $conn->prepare("select * from week5.users where id = ? ");
     $stmt->bind_param("i", $_GET['id']);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -34,11 +44,11 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
       $id = $_GET['id'];
       if ((strval($row['id']) !== $id) && (!$_SESSION['is_admin'])) {
         header("refresh:3;url=course-account.php?id=" . $_SESSION['id']);
-        die("Not admin or not your profile! Your id is");
+        die("Not admin or not your profile! Your id is ");
       }
       if (isset($_POST['username']) && $_SESSION['is_admin']) {
         $username = $_POST["username"];
-        $stmt = $conn->prepare("select * from users where username = ? ");
+        $stmt = $conn->prepare("select * from week5.users where username = ? ");
         $stmt->bind_param("s", $username);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -55,9 +65,9 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
       else $fullname = $row['fullname'];
       if (isset($_POST['phone']) && ($_POST['phone'] !== "")) $phone = $_POST["phone"];
       else $phone = $row['phone'];
+      $is_admin = $row['is_admin'];
+
       if (isset($_FILES["avatar"]) && $_FILES['avatar']['name'] !== "") {
-
-
         $filepath = $_FILES['avatar']['tmp_name'];
         $fileSize = filesize($filepath);
         $fileinfo = finfo_open(FILEINFO_MIME_TYPE);
@@ -87,18 +97,40 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
           die("Can't move file." . $newFilepath);
         }
         unlink($filepath);
-        header("refresh:3;url=add-user.php");
-        echo("Avatar uploaded successfully to " . path2url($newFilepath));
+        echo ("Avatar uploaded successfully to " . path2url($newFilepath));
       }
-      $stmt = $conn->prepare("UPDATE `users` SET `username` = ?, `password` = ?, `fullname` = ?, `email` = ?, `phone` = ?, `is_admin` = 0, `avatar` = ? WHERE `users`.`id` = $id");
-      $stmt->bind_param("sssssis", $username, $password, $fullname, $email, $phone, path2url($newFilepath));
-      $stmt->execute();
+      $stmt = $conn->prepare("UPDATE `users` SET `username` = ?, `password` = ?, `fullname` = ?, `email` = ?, `phone` = ?, `is_admin` = ?, `avatar` = ? WHERE `users`.`id` = $id");
+      $stmt->bind_param("sssssis", $username, $password, $fullname, $email, $phone, $is_admin, path2url($newFilepath));
+      if ($stmt->execute()) {
+        echo ("success");
+      } else {
+        echo "fail";
+      };
       $stmt->close();
       $conn->close();
     }
   } else {
-    header("refresh:3;url=add-user.php");
+    header("refresh:3;url=course-account.php");
     die("Id not found!");
+  }
+}
+if (isset($_POST['action']) && $_POST['action'] === "message" && isset($_POST['message']) && $_POST['message'] !== "") {
+  $stmt = $conn->prepare("SELECT * FROM week5.chats WHERE chats.id_from = ? AND chats.id_to = ?");
+  $stmt->bind_param("ii", $_SESSION['id'], $_GET['id']);
+  $stmt->execute();
+  $result = $stmt->get_result();
+  if ($result->num_rows == 0) {
+    $id = $_SESSION['id'];
+    $stmt = $conn->prepare("INSERT INTO `chats` (`id_from`, `id_to`, `message`) VALUES (?, ?, ?)");
+    $stmt->bind_param("iis", $id, $_GET['id'], $_POST['message']);
+    $stmt->execute();
+    $stmt->close();
+  } else {
+    $id = $_SESSION['id'];
+    $stmt = $conn->prepare("UPDATE week5.chats SET message = ? WHERE chats.id_from = ? AND chats.id_to = ?");
+    $stmt->bind_param("sii", $_POST['message'], $id, $_GET['id']);
+    $stmt->execute();
+    $stmt->close();
   }
 }
 ?>
@@ -130,7 +162,7 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
       <div class="row">
         <div id="course-left-sidebar" class="col-md-3">
           <div class="course-image-widget">
-            <img src="upload/xstudent_06.png.pagespeed.ic.M4STWuf1XS.png" alt="" class="img-responsive">
+            <img src="<?php echo $this_avatar; ?>" alt="" class="img-responsive">
           </div>
           <div class="course-meta">
             <p><?php echo $this_username ?></p>
@@ -141,7 +173,7 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
           <div class="course-description">
             <h3 class="course-title">Edit Profile</h3>
             <div class="edit-profile">
-              <form action="#" method="post" role="form" enctype="multipart/form-data">
+              <form method="post" role="form" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="alter" />
                 <div class="form-group">
                   <label>Username</label>
@@ -176,44 +208,48 @@ if (isset($_POST['action']) && $_POST['action'] === "alter") {
                 EOD;
                 if ($_SESSION['is_admin'] || (strval($_SESSION['id']) === $_GET['id'])) echo $x;
                 ?>
-                <div class="form-group">
-                  <label>Send a message</label>
-                  <textarea type="text" class="form-control" placeholder="Type your message in here"></textarea>
-                </div>
+                <?php
+                $s = <<<EOD
                 <div class="form-group">
                   <label>Upload Avatar</label>
                   <input type="file" name="avatar" class="btn btn-primary">
                 </div>
+                EOD;
+                if ($_SESSION['is_admin'] || (strval($_SESSION['id']) === $_GET['id'])) echo $s;
+                ?>
                 <button type="submit" class="btn btn-primary" formmethod="post">Submit Changes</button>
               </form>
+              <form method="post" role="form" enctype="multipart/form-data">
+                <div class="form-group">
+                  <label>Send a message</label>
+                  <input type="hidden" name="action" value="message" />
+                </div>
+                <textarea type="text" name="message" id="message" class="form-control" placeholder="Type your message in here"><?php echo $this_message ?></textarea>
+                <button type="submit" class="btn btn-primary" formmethod="post">Send message</button>
+              </form>
+
+              <?php
+              if ($_GET['id'] === strval($_SESSION['id'])) {
+                echo "<label>Message from others</label>";
+                $stmt = $conn->prepare("SELECT * FROM week5.chats INNER JOIN users ON users.id = chats.id_from WHERE chats.id_to = ?");
+                $stmt->bind_param("i",  $_GET['id']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                while ($row=$result->fetch_assoc()) {
+                  echo "<text>Message from ".$row['username']." : ".$row['message']."</text>";
+                }
+                $stmt->close();
+              }
+              ?>
             </div>
           </div>
           <hr class="invis">
-          <div class="other-courses">
-            <img src="images/xothers.png.pagespeed.ic.BLyi2PaMRC.png" alt="" class="">
-          </div>
         </div>
       </div>
       <hr class="invis">
     </div>
   </section>
   <?php include('footer.html'); ?>
-  <section class="copyright">
-    <div class="container">
-      <div class="row">
-        <div class="col-md-6 text-left">
-          <p><a target="_blank" href="https://www.templateshub.net">Templates Hub</a></p>
-        </div>
-        <div class="col-md-6 text-right">
-          <ul class="list-inline">
-            <li><a href="#">Terms of Usage</a></li>
-            <li><a href="#">Privacy Policy</a></li>
-            <li><a href="#">Sitemap</a></li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
   </div>
   <script src="js/jquery.min.js.pagespeed.jm.iDyG3vc4gw.js"></script>
   <script src="js/bootstrap.min.js%2bretina.js%2bwow.js.pagespeed.jc.pMrMbVAe_E.js"></script>

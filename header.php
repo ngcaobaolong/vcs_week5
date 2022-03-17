@@ -99,7 +99,6 @@
               </ul>
             </li>
             <li><a href="forums.php">User list</a></li>
-            <li><a href="page-contact.php">Contact</a></li>
           </ul>
           <ul class="nav navbar-nav navbar-right">
             <?php
