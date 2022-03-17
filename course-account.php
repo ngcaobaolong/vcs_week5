@@ -226,7 +226,7 @@ if (isset($_POST['action']) && $_POST['action'] === "message" && isset($_POST['m
                 <button type="submit" class="btn btn-primary" formmethod="post">Send message</button>
               </form>
               EOD;
-                echo $s;
+                echo $x;
               };
               if ($_GET['id'] === strval($_SESSION['id'])) {
                 echo "<label>Message from others</label>";
